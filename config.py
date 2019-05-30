@@ -8,6 +8,7 @@ config_options = [
     # Training config
     'vis_every',  # Visualize progress every X iterations
     'batch_size',
+    'subdivs',
     'num_epochs',
     'load_parameters',  # Load parameters from checkpoint
     'checkpoint_file',  # File for loading/storing checkpoints
@@ -25,6 +26,7 @@ MonetConfig = namedtuple('MonetConfig', config_options)
 
 sprite_config = MonetConfig(vis_every=50,
                             batch_size=64,
+                            subdivs=1,
                             num_epochs=20,
                             load_parameters=True,
                             checkpoint_file='./checkpoints/sprites.ckpt',
@@ -37,12 +39,13 @@ sprite_config = MonetConfig(vis_every=50,
                             fg_sigma=0.11,
                            )
 
-clevr_config = MonetConfig(vis_every=50,
+clevr_config = MonetConfig(vis_every=10,
                            batch_size=64,
+                           subdivs=8,
                            num_epochs=200,
-                           load_parameters=True,
-                           checkpoint_file='/work/checkpoints/clevr64.ckpt',
-                           data_dir=os.path.expanduser('~/data/CLEVR_v1.0/images/train/'),
+                           load_parameters=False,
+                           checkpoint_file='./checkpoints/clevr64.ckpt',
+                           data_dir=os.path.expanduser('~/Documents/CLEVR_v1.0/images/train/'),
                            parallel=True,
                            num_slots=11,
                            num_blocks=6,

@@ -4,6 +4,7 @@
 import torch
 import torch.nn as nn
 import torch.distributions as dists
+import torch.nn.functional as F
 
 import torchvision
 
@@ -147,7 +148,7 @@ class Monet(nn.Module):
         self.encoder = EncoderNet(height, width)
         self.decoder = DecoderNet(height, width)
         self.beta = 0.5
-        self.gamma = 0.25
+        self.gamma = 0.5
 
     def forward(self, x):
         scope = torch.ones_like(x[:, 0:1])
@@ -166,22 +167,23 @@ class Monet(nn.Module):
             sigma = self.conf.bg_sigma if i == 0 else self.conf.fg_sigma
             p_x, x_recon, mask_pred = self.__decoder_step(x, z, mask, sigma)
             mask_preds.append(mask_pred)
-            loss += -p_x + self.beta * kl_z
-            p_xs += -p_x
+            loss += p_x + self.beta * kl_z
+            p_xs += p_x
             kl_zs += kl_z
-            full_reconstruction += mask * x_recon
+            full_reconstruction += torch.unsqueeze(mask_pred, 1) * x_recon
 
         masks = torch.cat(masks, 1)
         tr_masks = torch.transpose(masks, 1, 3)
         q_masks = dists.Categorical(probs=tr_masks)
         q_masks_recon = dists.Categorical(logits=torch.stack(mask_preds, 3))
         kl_masks = dists.kl_divergence(q_masks, q_masks_recon)
-        kl_masks = torch.sum(kl_masks, [1, 2])
+        kl_masks = torch.mean(kl_masks, [1, 2])
         # print('px', p_xs.mean().item(),
         #       'kl_z', kl_zs.mean().item(),
         #       'kl masks', kl_masks.mean().item())
         loss += self.gamma * kl_masks
         return {'loss': loss,
+                'loss_break': [p_xs, kl_zs, kl_masks],
                 'masks': masks,
                 'reconstructions': full_reconstruction}
 
@@ -196,17 +198,19 @@ class Monet(nn.Module):
         z = means + dist_0.sample()
         q_z = dist.log_prob(z)
         kl_z = dists.kl_divergence(dist, dists.Normal(0., 1.))
-        kl_z = torch.sum(kl_z, 1)
+        kl_z = torch.mean(kl_z, 1)
         return z, kl_z
 
     def __decoder_step(self, x, z, mask, sigma):
         decoder_output = self.decoder(z)
         x_recon = torch.sigmoid(decoder_output[:, :3])
         mask_pred = decoder_output[:, 3]
-        dist = dists.Normal(x_recon, sigma)
-        p_x = dist.log_prob(x)
-        p_x *= mask
-        p_x = torch.sum(p_x, [1, 2, 3])
+        #dist = dists.Normal(x_recon, sigma)
+        #p_x = dist.log_prob(x)
+        #p_x = x_recon
+        #p_x *= mask
+        # p_x = torch.sum(p_x, [1, 2, 3])
+        p_x = F.mse_loss(x_recon*mask, x)
         return p_x, x_recon, mask_pred
 
 
