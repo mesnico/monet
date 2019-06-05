@@ -167,10 +167,10 @@ class Monet(nn.Module):
             sigma = self.conf.bg_sigma if i == 0 else self.conf.fg_sigma
             p_x, x_recon, mask_pred = self.__decoder_step(x, z, mask, sigma)
             mask_preds.append(mask_pred)
-            loss += p_x + self.beta * kl_z
-            p_xs += p_x
+            loss += -p_x + self.beta * kl_z
+            p_xs += -p_x
             kl_zs += kl_z
-            full_reconstruction += torch.unsqueeze(mask_pred, 1) * x_recon
+            full_reconstruction += mask * x_recon
 
         masks = torch.cat(masks, 1)
         tr_masks = torch.transpose(masks, 1, 3)
@@ -191,8 +191,8 @@ class Monet(nn.Module):
     def __encoder_step(self, x, mask):
         encoder_input = torch.cat((x, mask), 1)
         q_params = self.encoder(encoder_input)
-        means = torch.sigmoid(q_params[:, :16]) * 6 - 3
-        sigmas = torch.sigmoid(q_params[:, 16:]) * 3
+        means = q_params[:, :16]
+        sigmas = q_params[:, 16:]
         dist = dists.Normal(means, sigmas)
         dist_0 = dists.Normal(0., sigmas)
         z = means + dist_0.sample()
@@ -203,14 +203,14 @@ class Monet(nn.Module):
 
     def __decoder_step(self, x, z, mask, sigma):
         decoder_output = self.decoder(z)
-        x_recon = torch.sigmoid(decoder_output[:, :3])
+        # x_recon = torch.sigmoid(decoder_output[:, :3])
+        x_recon = decoder_output[:, :3]
         mask_pred = decoder_output[:, 3]
-        #dist = dists.Normal(x_recon, sigma)
-        #p_x = dist.log_prob(x)
-        #p_x = x_recon
-        #p_x *= mask
-        # p_x = torch.sum(p_x, [1, 2, 3])
-        p_x = F.mse_loss(x_recon*mask, x)
+        dist = dists.Normal(x_recon, sigma)
+        p_x = dist.log_prob(x)
+        p_x *= mask
+        p_x = torch.mean(p_x, [1, 2, 3])
+        # p_x = F.mse_loss(x_recon * mask, x, reduction='sum') / x.size[0]
         return p_x, x_recon, mask_pred
 
 
